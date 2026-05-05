@@ -22,7 +22,7 @@ export function Login() {
     }
   }, [isAuthenticated, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email || !password) {
@@ -32,15 +32,20 @@ export function Login() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      login();
+    try {
+      await login(email, password);
       toast.success('Login successful!', {
         description: 'Welcome to SAMPURNA Dashboard',
       });
       navigate('/dashboard');
-    }, 1500);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error('Login failed', {
+        description: error.message || 'Invalid credentials',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
