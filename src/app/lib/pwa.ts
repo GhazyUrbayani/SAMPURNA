@@ -137,13 +137,10 @@ export function setupPwa() {
   }
 
   try {
-    const icon192 = generatePngIcon(192);
-    const icon512 = generatePngIcon(512);
-    const manifestUrl = buildManifestBlobUrl(icon192, icon512);
-    ensureLink('manifest', manifestUrl);
-    ensureLink('apple-touch-icon', icon192, { sizes: '192x192' });
-    ensureLink('icon', icon192, { type: 'image/png', sizes: '192x192' });
-    ensureLink('shortcut icon', icon192);
+    ensureLink('manifest', '/manifest.webmanifest');
+    ensureLink('apple-touch-icon', '/logo.svg', { sizes: 'any' });
+    ensureLink('icon', '/logo.svg', { type: 'image/svg+xml' });
+    ensureLink('shortcut icon', '/logo.svg');
   } catch (err) {
     console.warn('PWA manifest setup failed:', err);
   }
