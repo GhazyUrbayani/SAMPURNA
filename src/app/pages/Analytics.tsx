@@ -17,8 +17,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Area,
-  ComposedChart,
 } from 'recharts';
 import {
   TrendingUp,
@@ -243,18 +241,49 @@ export function Analytics() {
                 </div>
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ComposedChart data={forecast.series}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="date" stroke="#6b7280" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                      <YAxis stroke="#6b7280" tick={{ fill: '#6b7280', fontSize: 12 }} domain={[0, 100]}
-                        label={{ value: 'Capacity (%)', angle: -90, position: 'insideLeft', fill: '#6b7280' }} />
-                      <Tooltip contentStyle={TOOLTIP_STYLE} />
-                      <Legend />
-                      <Area type="monotone" dataKey="band" stroke="none" fill="#9333ea" fillOpacity={0.15} name="Confidence interval" connectNulls={false} isAnimationActive={false} activeDot={false} />
-                      <Line type="monotone" dataKey="actual" stroke="#0d9488" strokeWidth={3} dot={false} activeDot={{ r: 5 }} name="Actual" connectNulls={false} isAnimationActive={false} />
-                      <Line type="monotone" dataKey="forecast" stroke="#9333ea" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={{ r: 5 }} name="Forecast" connectNulls={false} isAnimationActive={false} />
-                    </ComposedChart>
+                  <div className="flex items-center gap-4 mb-2 text-xs text-gray-600">
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#0d9488]" /> Actual</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-3 border-t-2 border-dashed border-[#9333ea]" /> Forecast</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart
+                      data={forecast.series}
+                      key={`forecast-${forecast.series.length}-${forecast.series[0]?.date ?? ''}`}
+                    >
+                      <CartesianGrid key="fc-grid" strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis key="fc-xaxis" dataKey="date" stroke="#6b7280" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                      <YAxis
+                        key="fc-yaxis"
+                        stroke="#6b7280"
+                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        domain={[0, 100]}
+                        label={{ value: 'Capacity (%)', angle: -90, position: 'insideLeft', fill: '#6b7280' }}
+                      />
+                      <Tooltip key="fc-tooltip" contentStyle={TOOLTIP_STYLE} />
+                      <Line
+                        key="fc-line-actual"
+                        type="monotone"
+                        dataKey="actual"
+                        stroke="#0d9488"
+                        strokeWidth={3}
+                        dot={false}
+                        activeDot={{ r: 5 }}
+                        name="Actual"
+                        isAnimationActive={false}
+                      />
+                      <Line
+                        key="fc-line-forecast"
+                        type="monotone"
+                        dataKey="forecast"
+                        stroke="#9333ea"
+                        strokeWidth={2}
+                        strokeDasharray="6 4"
+                        dot={false}
+                        activeDot={{ r: 5 }}
+                        name="Forecast"
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
                   </ResponsiveContainer>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
                     <div className="p-3 bg-gray-50 rounded-lg">

@@ -24,6 +24,31 @@ const supabaseAdmin = () =>
 
 app.get("/make-server-8403692b/health", (c) => c.json({ status: "ok" }));
 
+app.get("/make-server-8403692b/manifest.json", (c) => {
+  const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192"><rect width="192" height="192" rx="34" fill="#2c5f6f"/><rect x="64" y="56" width="64" height="8" rx="2" fill="white"/><path d="M56 72 L136 72 L128 152 Q128 160 120 160 L72 160 Q64 160 64 152 Z" fill="none" stroke="white" stroke-width="6" stroke-linejoin="round"/><line x1="80" y1="88" x2="80" y2="148" stroke="white" stroke-width="6" stroke-linecap="round"/><line x1="112" y1="88" x2="112" y2="148" stroke="white" stroke-width="6" stroke-linecap="round"/></svg>`;
+  const iconDataUri = `data:image/svg+xml;base64,${btoa(svgIcon)}`;
+  const manifest = {
+    id: "/sampurna-app",
+    name: "SAMPURNA — Smart Waste Monitoring",
+    short_name: "SAMPURNA",
+    description: "IoT-based waste bin monitoring and analytics dashboard for smart city sanitation management",
+    start_url: "/dashboard",
+    scope: "/",
+    display: "standalone",
+    orientation: "any",
+    background_color: "#f8fafc",
+    theme_color: "#2c5f6f",
+    categories: ["productivity", "utilities"],
+    lang: "id",
+    dir: "ltr",
+    icons: [
+      { src: iconDataUri, sizes: "192x192", type: "image/svg+xml", purpose: "any" },
+      { src: iconDataUri, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" },
+    ],
+  };
+  return c.json(manifest, 200, { "Content-Type": "application/manifest+json" });
+});
+
 app.post("/make-server-8403692b/seed-history", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));

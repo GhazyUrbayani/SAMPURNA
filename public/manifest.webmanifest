@@ -2,7 +2,7 @@
   "name": "SAMPURNA — Smart Waste Monitoring",
   "short_name": "SAMPURNA",
   "description": "IoT-based waste bin monitoring and analytics dashboard",
-  "start_url": "/dashboard",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

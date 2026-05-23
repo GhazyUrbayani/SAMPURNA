@@ -43,6 +43,83 @@ function ensureLink(rel: string, href: string, attrs: Record<string, string> = {
   Object.entries(attrs).forEach(([k, v]) => el!.setAttribute(k, v));
 }
 
+function generatePngIcon(size: number): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const radius = size * 0.18;
+  ctx.fillStyle = '#2c5f6f';
+  ctx.beginPath();
+  ctx.moveTo(radius, 0);
+  ctx.lineTo(size - radius, 0);
+  ctx.quadraticCurveTo(size, 0, size, radius);
+  ctx.lineTo(size, size - radius);
+  ctx.quadraticCurveTo(size, size, size - radius, size);
+  ctx.lineTo(radius, size);
+  ctx.quadraticCurveTo(0, size, 0, size - radius);
+  ctx.lineTo(0, radius);
+  ctx.quadraticCurveTo(0, 0, radius, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  const s = size / 192;
+  ctx.strokeStyle = 'white';
+  ctx.fillStyle = 'white';
+  ctx.lineWidth = 6 * s;
+  ctx.lineCap = 'round';
+
+  ctx.fillRect(64 * s, 56 * s, 64 * s, 8 * s);
+
+  ctx.beginPath();
+  ctx.moveTo(56 * s, 72 * s);
+  ctx.lineTo(136 * s, 72 * s);
+  ctx.lineTo(128 * s, 152 * s);
+  ctx.quadraticCurveTo(128 * s, 160 * s, 120 * s, 160 * s);
+  ctx.lineTo(72 * s, 160 * s);
+  ctx.quadraticCurveTo(64 * s, 160 * s, 64 * s, 152 * s);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(80 * s, 88 * s);
+  ctx.lineTo(80 * s, 148 * s);
+  ctx.moveTo(112 * s, 88 * s);
+  ctx.lineTo(112 * s, 148 * s);
+  ctx.stroke();
+
+  return canvas.toDataURL('image/png');
+}
+
+function buildManifestBlobUrl(icon192: string, icon512: string): string {
+  const origin = window.location.origin;
+  const manifest = {
+    id: '/sampurna-app',
+    name: 'SAMPURNA — Smart Waste Monitoring',
+    short_name: 'SAMPURNA',
+    description: 'IoT-based waste bin monitoring and analytics dashboard for smart city sanitation management',
+    start_url: `${origin}/dashboard`,
+    scope: `${origin}/`,
+    display: 'standalone',
+    orientation: 'any',
+    background_color: '#f8fafc',
+    theme_color: '#2c5f6f',
+    categories: ['productivity', 'utilities'],
+    lang: 'id',
+    dir: 'ltr',
+    icons: [
+      { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+  return URL.createObjectURL(blob);
+}
+
 export function setupPwa() {
   if (typeof document === 'undefined') return;
 
@@ -52,12 +129,24 @@ export function setupPwa() {
   ensureMeta('apple-mobile-web-app-status-bar-style', 'default');
   ensureMeta('apple-mobile-web-app-title', 'SAMPURNA');
   ensureMeta('mobile-web-app-capable', 'yes');
-  ensureMeta('description', 'SAMPURNA — IoT-based waste bin monitoring and analytics dashboard');
+  ensureMeta('description', 'SAMPURNA — IoT-based waste bin monitoring and analytics dashboard for smart city sanitation management');
+  ensureMeta('application-name', 'SAMPURNA');
 
-  ensureLink('manifest', '/manifest.webmanifest');
+  if (!document.title || document.title.toLowerCase().includes('vite')) {
+    document.title = 'SAMPURNA — Smart Waste Monitoring';
+  }
 
-  const appleIcon = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='32' fill='%232c5f6f'/><path d='M60 52h60v8H60zm-8 16h76v8l-8 76a8 8 0 0 1-8 8H68a8 8 0 0 1-8-8l-8-76zm22 16v60m34-60v60' stroke='white' stroke-width='6' stroke-linecap='round' fill='none'/></svg>`;
-  ensureLink('apple-touch-icon', appleIcon);
+  try {
+    const icon192 = generatePngIcon(192);
+    const icon512 = generatePngIcon(512);
+    const manifestUrl = buildManifestBlobUrl(icon192, icon512);
+    ensureLink('manifest', manifestUrl);
+    ensureLink('apple-touch-icon', icon192, { sizes: '192x192' });
+    ensureLink('icon', icon192, { type: 'image/png', sizes: '192x192' });
+    ensureLink('shortcut icon', icon192);
+  } catch (err) {
+    console.warn('PWA manifest setup failed:', err);
+  }
 
   const host = window.location.hostname;
   const isFigmaPreview = host.includes('figma.site') || host.includes('figma.com') || window.self !== window.top;

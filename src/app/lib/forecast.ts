@@ -3,9 +3,10 @@ import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
 export interface ForecastPoint {
   date: string;
-  actual: number | null;
-  forecast: number | null;
-  band: [number, number] | null;
+  actual?: number;
+  forecast?: number;
+  upper?: number;
+  lower?: number;
 }
 
 interface HistoryRow {
@@ -83,12 +84,16 @@ export async function buildForecast(daysHistory = 30, daysForecast = 7): Promise
 
   const { slope, intercept, r2, stderr } = linearRegression(points);
 
-  const series: ForecastPoint[] = dailyAvg.map(d => ({
-    date: d.date,
-    actual: Math.round(d.avg * 10) / 10,
-    forecast: null,
-    band: null,
-  }));
+  const seenDates = new Set<string>();
+  const series: ForecastPoint[] = [];
+  dailyAvg.forEach(d => {
+    if (seenDates.has(d.date)) return;
+    seenDates.add(d.date);
+    series.push({
+      date: d.date,
+      actual: Math.round(d.avg * 10) / 10,
+    });
+  });
 
   const lastX = points[points.length - 1].x;
   const lastDate = new Date(dailyAvg[dailyAvg.length - 1].date + 'T00:00:00Z');
@@ -101,11 +106,14 @@ export async function buildForecast(daysHistory = 30, daysForecast = 7): Promise
     next.setUTCDate(next.getUTCDate() + i);
     const upper = Math.min(100, Math.round((clamped + ci) * 10) / 10);
     const lower = Math.max(0, Math.round((clamped - ci) * 10) / 10);
+    const dateStr = toIsoDay(next);
+    if (seenDates.has(dateStr)) continue;
+    seenDates.add(dateStr);
     series.push({
-      date: toIsoDay(next),
-      actual: null,
+      date: dateStr,
       forecast: Math.round(clamped * 10) / 10,
-      band: [lower, upper],
+      upper,
+      lower,
     });
   }
 
