@@ -29,12 +29,14 @@ export default defineConfig({
         return {
           html,
           tags: [
-            { tag: 'link', attrs: { rel: 'manifest', href: '/manifest.webmanifest' }, injectTo: 'head' },
+            { tag: 'link', attrs: { rel: 'manifest', href: '/manifest.json' }, injectTo: 'head' },
             { tag: 'meta', attrs: { name: 'theme-color', content: '#2c5f6f' }, injectTo: 'head' },
             { tag: 'meta', attrs: { name: 'application-name', content: 'SAMPURNA' }, injectTo: 'head' },
             { tag: 'meta', attrs: { name: 'apple-mobile-web-app-capable', content: 'yes' }, injectTo: 'head' },
             { tag: 'meta', attrs: { name: 'apple-mobile-web-app-title', content: 'SAMPURNA' }, injectTo: 'head' },
-            { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/icon-192.svg' }, injectTo: 'head' },
+            { tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/icon-192.png' }, injectTo: 'head' },
+            { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icon-192.png' }, injectTo: 'head' },
+            { tag: 'link', attrs: { rel: 'icon', type: 'image/png', sizes: '512x512', href: '/icon-512.png' }, injectTo: 'head' },
           ],
         };
       },

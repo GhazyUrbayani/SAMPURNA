@@ -137,7 +137,7 @@ export function setupPwa() {
   }
 
   try {
-    ensureLink('manifest', '/manifest.webmanifest');
+    ensureLink('manifest', '/manifest.json');
     ensureLink('apple-touch-icon', '/logo.svg', { sizes: 'any' });
     ensureLink('icon', '/logo.svg', { type: 'image/svg+xml' });
     ensureLink('shortcut icon', '/logo.svg');
