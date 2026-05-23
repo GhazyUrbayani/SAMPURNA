@@ -226,6 +226,9 @@ export function Analytics() {
                       </Badge>
                     )}
                     <Badge variant="outline">R² {(forecast.r2 * 100).toFixed(0)}%</Badge>
+                    <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200">
+                      {forecast.model}
+                    </Badge>
                   </div>
                 )}
               </div>

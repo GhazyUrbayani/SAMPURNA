@@ -1,3 +1,4 @@
+import ARIMA from 'arima';
 import { supabase } from './supabase';
 import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
@@ -15,7 +16,24 @@ interface HistoryRow {
   recorded_at: string;
 }
 
-function linearRegression(points: { x: number; y: number }[]) {
+export interface ForecastResult {
+  series: ForecastPoint[];
+  slope: number;
+  r2: number;
+  hoursToFull: number | null;
+  trend: 'rising' | 'stable' | 'falling';
+  model: 'ARIMA' | 'AutoARIMA' | 'LinearRegression';
+}
+
+function dayKey(iso: string) {
+  return iso.split('T')[0];
+}
+
+function toIsoDay(d: Date) {
+  return d.toISOString().split('T')[0];
+}
+
+function linearFallback(points: { x: number; y: number }[]) {
   const n = points.length;
   if (n < 2) return { slope: 0, intercept: points[0]?.y ?? 0, r2: 0, stderr: 0 };
   const sumX = points.reduce((s, p) => s + p.x, 0);
@@ -32,20 +50,53 @@ function linearRegression(points: { x: number; y: number }[]) {
   return { slope, intercept, r2, stderr };
 }
 
-function dayKey(iso: string) {
-  return iso.split('T')[0];
+function computeR2(actual: number[], fitted: number[]): number {
+  if (actual.length === 0) return 0;
+  const mean = actual.reduce((a, b) => a + b, 0) / actual.length;
+  let ssTot = 0;
+  let ssRes = 0;
+  for (let i = 0; i < actual.length; i++) {
+    ssTot += (actual[i] - mean) ** 2;
+    ssRes += (actual[i] - fitted[i]) ** 2;
+  }
+  return ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
 }
 
-function toIsoDay(d: Date) {
-  return d.toISOString().split('T')[0];
-}
-
-export interface ForecastResult {
-  series: ForecastPoint[];
-  slope: number;
-  r2: number;
-  hoursToFull: number | null;
-  trend: 'rising' | 'stable' | 'falling';
+function runArima(series: number[], steps: number): {
+  forecast: number[];
+  errors: number[];
+  fitted: number[];
+  modelName: 'ARIMA' | 'AutoARIMA';
+} | null {
+  try {
+    // AutoARIMA picks (p,d,q) via small grid search — best for general time series.
+    const auto = new ARIMA({ auto: true, approximation: 1, search: 0 } as any).fit(series);
+    const [forecast, errors] = auto.predict(steps);
+    // In-sample fitted values for R² calculation.
+    const [fitted] = auto.predict(0) as unknown as [number[], number[]];
+    auto.destroy?.();
+    return {
+      forecast: Array.from(forecast),
+      errors: Array.from(errors),
+      fitted: Array.isArray(fitted) && fitted.length === series.length ? Array.from(fitted) : series,
+      modelName: 'AutoARIMA',
+    };
+  } catch {
+    try {
+      // Fallback to fixed ARIMA(1,1,1) — robust default for noisy daily metrics.
+      const model = new ARIMA({ p: 1, d: 1, q: 1, verbose: false } as any).fit(series);
+      const [forecast, errors] = model.predict(steps);
+      model.destroy?.();
+      return {
+        forecast: Array.from(forecast),
+        errors: Array.from(errors),
+        fitted: series,
+        modelName: 'ARIMA',
+      };
+    } catch {
+      return null;
+    }
+  }
 }
 
 export async function buildForecast(daysHistory = 30, daysForecast = 7): Promise<ForecastResult> {
@@ -73,53 +124,77 @@ export async function buildForecast(daysHistory = 30, daysForecast = 7): Promise
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (dailyAvg.length === 0) {
-    return { series: [], slope: 0, r2: 0, hoursToFull: null, trend: 'stable' };
+    return { series: [], slope: 0, r2: 0, hoursToFull: null, trend: 'stable', model: 'LinearRegression' };
   }
 
-  const baseDate = new Date(dailyAvg[0].date + 'T00:00:00Z');
-  const points = dailyAvg.map(d => ({
-    x: (new Date(d.date + 'T00:00:00Z').getTime() - baseDate.getTime()) / 86400000,
-    y: d.avg,
-  }));
-
-  const { slope, intercept, r2, stderr } = linearRegression(points);
+  const yValues = dailyAvg.map(d => d.avg);
+  const lastDate = new Date(dailyAvg[dailyAvg.length - 1].date + 'T00:00:00Z');
 
   const seenDates = new Set<string>();
   const series: ForecastPoint[] = [];
   dailyAvg.forEach(d => {
     if (seenDates.has(d.date)) return;
     seenDates.add(d.date);
-    series.push({
-      date: d.date,
-      actual: Math.round(d.avg * 10) / 10,
-    });
+    series.push({ date: d.date, actual: Math.round(d.avg * 10) / 10 });
   });
 
-  const lastX = points[points.length - 1].x;
-  const lastDate = new Date(dailyAvg[dailyAvg.length - 1].date + 'T00:00:00Z');
-  for (let i = 1; i <= daysForecast; i++) {
-    const x = lastX + i;
-    const yhat = slope * x + intercept;
-    const clamped = Math.min(100, Math.max(0, yhat));
-    const ci = 1.96 * stderr;
+  let slope = 0;
+  let r2 = 0;
+  let modelName: ForecastResult['model'] = 'LinearRegression';
+  let forecastValues: number[] = [];
+  let errorValues: number[] = [];
+
+  // ARIMA needs a minimum of ~10 points to fit a useful model. Below that, fall back.
+  const arimaResult = yValues.length >= 10 ? runArima(yValues, daysForecast) : null;
+
+  if (arimaResult) {
+    forecastValues = arimaResult.forecast;
+    errorValues = arimaResult.errors;
+    modelName = arimaResult.modelName;
+    r2 = computeR2(yValues, arimaResult.fitted);
+    // Slope = average %/day change across the forecast horizon.
+    const first = yValues[yValues.length - 1];
+    const last = forecastValues[forecastValues.length - 1] ?? first;
+    slope = (last - first) / Math.max(forecastValues.length, 1);
+  } else {
+    const points = yValues.map((y, i) => ({ x: i, y }));
+    const fit = linearFallback(points);
+    slope = fit.slope;
+    const fitted = points.map(p => fit.slope * p.x + fit.intercept);
+    r2 = computeR2(yValues, fitted);
+    const lastX = points[points.length - 1].x;
+    forecastValues = Array.from({ length: daysForecast }, (_, i) => fit.slope * (lastX + i + 1) + fit.intercept);
+    errorValues = Array.from({ length: daysForecast }, () => fit.stderr);
+    modelName = 'LinearRegression';
+  }
+
+  for (let i = 0; i < daysForecast; i++) {
     const next = new Date(lastDate);
-    next.setUTCDate(next.getUTCDate() + i);
-    const upper = Math.min(100, Math.round((clamped + ci) * 10) / 10);
-    const lower = Math.max(0, Math.round((clamped - ci) * 10) / 10);
+    next.setUTCDate(next.getUTCDate() + i + 1);
     const dateStr = toIsoDay(next);
     if (seenDates.has(dateStr)) continue;
     seenDates.add(dateStr);
+
+    const yhat = Math.min(100, Math.max(0, forecastValues[i] ?? 0));
+    const ci = 1.96 * (errorValues[i] ?? 0);
     series.push({
       date: dateStr,
-      forecast: Math.round(clamped * 10) / 10,
-      upper,
-      lower,
+      forecast: Math.round(yhat * 10) / 10,
+      upper: Math.min(100, Math.round((yhat + ci) * 10) / 10),
+      lower: Math.max(0, Math.round((yhat - ci) * 10) / 10),
     });
   }
 
-  const currentAvg = dailyAvg[dailyAvg.length - 1].avg;
+  const currentAvg = yValues[yValues.length - 1];
   let hoursToFull: number | null = null;
-  if (slope > 0.05) {
+  // Walk the forecast trajectory looking for the first crossing of 100%.
+  for (let i = 0; i < forecastValues.length; i++) {
+    if ((forecastValues[i] ?? 0) >= 100) {
+      hoursToFull = (i + 1) * 24;
+      break;
+    }
+  }
+  if (hoursToFull == null && slope > 0.05) {
     const daysToFull = (100 - currentAvg) / slope;
     if (daysToFull > 0 && daysToFull < 90) hoursToFull = Math.round(daysToFull * 24);
   }
@@ -127,7 +202,7 @@ export async function buildForecast(daysHistory = 30, daysForecast = 7): Promise
   const trend: ForecastResult['trend'] =
     slope > 0.3 ? 'rising' : slope < -0.3 ? 'falling' : 'stable';
 
-  return { series, slope, r2, hoursToFull, trend };
+  return { series, slope, r2, hoursToFull, trend, model: modelName };
 }
 
 export async function seedHistoricalData(daysBack = 30, readingsPerDay = 4): Promise<{ inserted: number; bins: number }> {
