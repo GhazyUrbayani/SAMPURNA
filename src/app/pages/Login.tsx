@@ -32,15 +32,18 @@ export function Login() {
 
     setIsLoading(true);
 
-    // Simulate API call
     setTimeout(() => {
       setIsLoading(false);
-      login();
+      const result = login(email, password);
+      if (!result.ok) {
+        toast.error('Login failed', { description: result.error });
+        return;
+      }
       toast.success('Login successful!', {
         description: 'Welcome to SAMPURNA Dashboard',
       });
       navigate('/dashboard');
-    }, 1500);
+    }, 800);
   };
 
   return (
@@ -126,15 +129,25 @@ export function Login() {
               <div className="text-center text-sm text-gray-600">
                 Demo Credentials
               </div>
-              <div className="mt-2 p-3 bg-teal-50 rounded-lg text-xs space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Email:</span>
-                  <span className="font-medium text-gray-900">manager@sampurna.id</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Password:</span>
-                  <span className="font-medium text-gray-900">demo123</span>
-                </div>
+              <div className="mt-2 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { setEmail('manager@sampurna.id'); setPassword('demo123'); }}
+                  className="w-full p-3 bg-teal-50 hover:bg-teal-100 transition rounded-lg text-xs text-left"
+                >
+                  <div className="font-semibold text-[#2c5f6f] mb-1">Admin (Operations Manager)</div>
+                  <div className="text-gray-700">manager@sampurna.id · demo123</div>
+                  <div className="text-gray-500 mt-0.5">Full access — Dashboard, Analytics, Devices</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEmail('staff@sampurna.id'); setPassword('staff123'); }}
+                  className="w-full p-3 bg-slate-50 hover:bg-slate-100 transition rounded-lg text-xs text-left"
+                >
+                  <div className="font-semibold text-slate-700 mb-1">Staff (Cleaning Staff)</div>
+                  <div className="text-gray-700">staff@sampurna.id · staff123</div>
+                  <div className="text-gray-500 mt-0.5">Limited access — Dashboard only</div>
+                </button>
               </div>
             </div>
           </CardContent>

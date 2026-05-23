@@ -9,7 +9,10 @@ import {
   LogOut,
   Trash2,
   Menu,
-  X
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  WifiOff,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import {
@@ -22,48 +25,92 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Badge } from './ui/badge';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, UserRole } from '../contexts/AuthContext';
+import { useNotifications, Notification } from '../hooks/useNotifications';
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
-  { path: '/dashboard/devices', label: 'Device Management', icon: Cpu },
+type NavItem = {
+  path: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  roles: UserRole[];
+};
+
+const navItems: NavItem[] = [
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'staff'] },
+  { path: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin'] },
+  { path: '/dashboard/devices', label: 'Device Management', icon: Cpu, roles: ['admin'] },
 ];
+
+function formatRelative(ts: string) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function NotificationItem({ n, isRead, onClick }: { n: Notification; isRead: boolean; onClick: () => void }) {
+  const Icon = n.severity === 'offline' ? WifiOff : AlertTriangle;
+  const color =
+    n.severity === 'critical' ? 'text-rose-600' :
+    n.severity === 'warning' ? 'text-amber-600' :
+    'text-gray-500';
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full p-3 text-left hover:bg-gray-50 transition border-b last:border-b-0 ${isRead ? 'opacity-60' : ''}`}
+    >
+      <div className="flex items-start gap-3">
+        <Icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${color}`} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-gray-900 truncate">{n.binId}</p>
+            {!isRead && <span className="w-2 h-2 bg-rose-500 rounded-full flex-shrink-0" />}
+          </div>
+          <p className="text-xs text-gray-600 truncate">{n.location}</p>
+          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.message}</p>
+          <p className="text-xs text-gray-400 mt-1">{formatRelative(n.timestamp)}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
 
 export function Layout() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { notifications, unreadCount, markAllAsRead, markAsRead, readIds } = useNotifications();
+
+  const visibleNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
+  const handleBellOpenChange = (open: boolean) => {
+    if (open && unreadCount > 0) markAllAsRead();
+  };
+
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Mobile Menu Overlay */}
+    <div className="flex h-[100dvh] bg-gray-50">
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
-        w-64 bg-white border-r border-gray-200 flex flex-col
-        transform transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Mobile Close Button */}
+      <aside
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 flex flex-col transform transition-transform duration-300 ease-in-out ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
         <div className="lg:hidden absolute top-4 right-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
+          <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
             <X className="w-5 h-5" />
           </Button>
         </div>
@@ -80,8 +127,8 @@ export function Layout() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => (
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -89,9 +136,7 @@ export function Layout() {
               onClick={() => setIsMobileMenuOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  isActive
-                    ? 'bg-teal-50 text-[#2c5f6f]'
-                    : 'text-gray-700 hover:bg-gray-50'
+                  isActive ? 'bg-teal-50 text-[#2c5f6f]' : 'text-gray-700 hover:bg-gray-50'
                 }`
               }
             >
@@ -99,95 +144,106 @@ export function Layout() {
               <span>{item.label}</span>
             </NavLink>
           ))}
+          {user?.role === 'staff' && (
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg text-xs text-slate-600">
+              Signed in as <span className="font-semibold">Staff</span>. Some areas are restricted to administrators.
+            </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-200">
           <div className="text-xs text-gray-500 mb-2">System Status</div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-[#2c5f6f] rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-[#2c5f6f] rounded-full animate-pulse" />
             <span className="text-sm text-gray-700">All Systems Operational</span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Header */}
-        <header className="bg-white border-b border-gray-200 px-4 lg:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* Mobile Menu Button */}
+        <header className="bg-white border-b border-gray-200 px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden flex-shrink-0"
                 onClick={() => setIsMobileMenuOpen(true)}
               >
                 <Menu className="w-5 h-5" />
               </Button>
 
-              <div>
-                <h2 className="text-lg lg:text-xl font-semibold text-gray-900">IoT Waste Monitoring</h2>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-900 truncate">
+                  IoT Waste Monitoring
+                </h2>
                 <p className="text-xs lg:text-sm text-gray-500 hidden sm:block">Real-time bin capacity tracking</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 lg:gap-4">
-              {/* Notifications */}
-              <DropdownMenu>
+            <div className="flex items-center gap-1 sm:gap-2 lg:gap-4 flex-shrink-0">
+              <DropdownMenu onOpenChange={handleBellOpenChange}>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
+                  <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
                     <Bell className="w-5 h-5" />
-                    <Badge 
-                      className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 bg-red-500 text-white text-xs"
-                    >
-                      2
-                    </Badge>
+                    {unreadCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 min-w-5 h-5 flex items-center justify-center p-0 px-1 bg-red-500 text-white text-xs">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Badge>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] sm:w-96 max-h-[70vh] overflow-y-auto">
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>Notifications</span>
+                    {notifications.length > 0 && (
+                      <span className="text-xs font-normal text-gray-500">{notifications.length} total</span>
+                    )}
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <div className="p-3 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Labtek VIII - Cafeteria</p>
-                        <p className="text-xs text-gray-500">Bin capacity at 92% - Requires immediate pickup</p>
-                        <p className="text-xs text-gray-400 mt-1">3 minutes ago</p>
-                      </div>
+                  {notifications.length === 0 ? (
+                    <div className="p-6 flex flex-col items-center text-center gap-2">
+                      <CheckCircle2 className="w-8 h-8 text-teal-500" />
+                      <p className="text-sm font-medium text-gray-700">All clear!</p>
+                      <p className="text-xs text-gray-500">No bins require attention right now.</p>
                     </div>
-                  </div>
-                  <div className="p-3 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Labtek V - Floor 1</p>
-                        <p className="text-xs text-gray-500">Bin capacity at 85% - Requires immediate pickup</p>
-                        <p className="text-xs text-gray-400 mt-1">5 minutes ago</p>
-                      </div>
-                    </div>
-                  </div>
+                  ) : (
+                    notifications.map(n => (
+                      <NotificationItem
+                        key={n.id}
+                        n={n}
+                        isRead={readIds.has(n.id)}
+                        onClick={() => {
+                          markAsRead(n.id);
+                          navigate('/dashboard');
+                        }}
+                      />
+                    ))
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* User Profile */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2">
+                  <Button variant="ghost" className="flex items-center gap-2 px-2 sm:px-3">
                     <Avatar className="w-8 h-8">
                       <AvatarFallback className="bg-teal-100 text-[#2c5f6f]">
-                        OM
+                        {user?.initials ?? '??'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="text-left hidden md:block">
-                      <p className="text-sm font-medium">Operations Manager</p>
-                      <p className="text-xs text-gray-500">manager@sampurna.id</p>
+                      <p className="text-sm font-medium leading-tight">{user?.name}</p>
+                      <p className="text-xs text-gray-500 leading-tight">{user?.email}</p>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col">
+                      <span>{user?.name}</span>
+                      <span className="text-xs font-normal text-gray-500 capitalize">{user?.role} account</span>
+                    </div>
+                  </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <User className="mr-2 h-4 w-4" />
@@ -203,7 +259,6 @@ export function Layout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>

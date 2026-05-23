@@ -30,11 +30,19 @@ export const router = createBrowserRouter([
       },
       {
         path: 'analytics',
-        Component: Analytics,
+        element: (
+          <ProtectedRoute allowedRoles={['admin']}>
+            <Analytics />
+          </ProtectedRoute>
+        ),
       },
       {
         path: 'devices',
-        Component: DeviceManagement,
+        element: (
+          <ProtectedRoute allowedRoles={['admin']}>
+            <DeviceManagement />
+          </ProtectedRoute>
+        ),
       },
     ],
   },

@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Button } from '../components/ui/button';
@@ -16,6 +17,8 @@ import {
   PieChart,
   Pie,
   Cell,
+  Area,
+  ComposedChart,
 } from 'recharts';
 import {
   TrendingUp,
@@ -25,8 +28,15 @@ import {
   RefreshCw,
   Bell,
   CheckCircle,
+  Sparkles,
+  Database,
+  TrendingDown,
+  Minus,
+  Loader2,
 } from 'lucide-react';
 import { useAnalytics } from '../hooks/useAnalytics';
+import { buildForecast, seedHistoricalData, ForecastResult } from '../lib/forecast';
+import { toast } from 'sonner';
 
 const TOOLTIP_STYLE = {
   backgroundColor: '#fff',
@@ -37,6 +47,46 @@ const TOOLTIP_STYLE = {
 
 export function Analytics() {
   const { trends, zoneData, statusDistribution, alerts, summary, loading, refetch } = useAnalytics();
+  const [forecast, setForecast] = useState<ForecastResult | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  const loadForecast = useCallback(async () => {
+    try {
+      setForecastLoading(true);
+      const result = await buildForecast(30, 7);
+      setForecast(result);
+    } catch (err: unknown) {
+      console.error('Forecast error:', err);
+      toast.error('Failed to build forecast', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setForecastLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadForecast(); }, [loadForecast]);
+
+  const handleSeed = async () => {
+    if (!confirm('Generate 30 days of synthetic capacity history and push to Supabase? This may insert thousands of rows.')) return;
+    try {
+      setSeeding(true);
+      toast.info('Seeding historical data...', { description: 'Generating synthetic readings' });
+      const result = await seedHistoricalData(30, 4);
+      toast.success('Historical data seeded!', {
+        description: `Inserted ${result.inserted} readings across ${result.bins} bins.`,
+      });
+      await Promise.all([refetch(), loadForecast()]);
+    } catch (err: unknown) {
+      console.error('Seed error:', err);
+      toast.error('Seed failed', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const formatAlertTime = (dateStr: string | null) => {
     if (!dateStr) return '';
@@ -54,19 +104,25 @@ export function Analytics() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-semibold text-gray-900">Analytics & Historical Data</h3>
+          <h3 className="text-xl sm:text-2xl font-semibold text-gray-900">Analytics & Historical Data</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Track trends and analyze waste collection patterns
+            Track trends, AI forecasts, and waste collection patterns
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleSeed} disabled={seeding}>
+            {seeding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Database className="w-4 h-4 mr-2" />}
+            {seeding ? 'Seeding...' : 'Seed Historical Data'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { refetch(); loadForecast(); }} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -130,12 +186,104 @@ export function Analytics() {
       </div>
 
       {/* Charts Section */}
-      <Tabs defaultValue="trends" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="forecast" className="space-y-4">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="forecast">
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            AI Forecast
+          </TabsTrigger>
           <TabsTrigger value="trends">Capacity Trends</TabsTrigger>
           <TabsTrigger value="zones">Zone Comparison</TabsTrigger>
           <TabsTrigger value="status">Status Distribution</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="forecast" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-[#2c5f6f]" />
+                    AI Capacity Forecast — Next 7 Days
+                  </CardTitle>
+                  <CardDescription>
+                    Linear regression model trained on the last 30 days of capacity readings
+                  </CardDescription>
+                </div>
+                {forecast && forecast.series.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {forecast.trend === 'rising' && (
+                      <Badge className="bg-rose-50 text-rose-700 border-rose-200">
+                        <TrendingUp className="w-3 h-3 mr-1" /> Rising
+                      </Badge>
+                    )}
+                    {forecast.trend === 'falling' && (
+                      <Badge className="bg-teal-50 text-teal-700 border-teal-200">
+                        <TrendingDown className="w-3 h-3 mr-1" /> Falling
+                      </Badge>
+                    )}
+                    {forecast.trend === 'stable' && (
+                      <Badge className="bg-gray-50 text-gray-700 border-gray-200">
+                        <Minus className="w-3 h-3 mr-1" /> Stable
+                      </Badge>
+                    )}
+                    <Badge variant="outline">R² {(forecast.r2 * 100).toFixed(0)}%</Badge>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {forecastLoading ? (
+                <div className="h-[400px] bg-gray-100 rounded animate-pulse" />
+              ) : !forecast || forecast.series.length === 0 ? (
+                <div className="h-[400px] flex flex-col items-center justify-center text-gray-400 gap-3">
+                  <Sparkles className="w-12 h-12" />
+                  <p className="text-lg font-medium">Not enough historical data</p>
+                  <p className="text-sm">Click <span className="font-medium">Seed Historical Data</span> above to generate synthetic readings.</p>
+                </div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <ComposedChart data={forecast.series}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="date" stroke="#6b7280" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                      <YAxis stroke="#6b7280" tick={{ fill: '#6b7280', fontSize: 12 }} domain={[0, 100]}
+                        label={{ value: 'Capacity (%)', angle: -90, position: 'insideLeft', fill: '#6b7280' }} />
+                      <Tooltip contentStyle={TOOLTIP_STYLE} />
+                      <Legend />
+                      <Area type="monotone" dataKey="band" stroke="none" fill="#9333ea" fillOpacity={0.15} name="Confidence interval" connectNulls={false} isAnimationActive={false} activeDot={false} />
+                      <Line type="monotone" dataKey="actual" stroke="#0d9488" strokeWidth={3} dot={false} activeDot={{ r: 5 }} name="Actual" connectNulls={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="forecast" stroke="#9333ea" strokeWidth={2} strokeDasharray="6 4" dot={false} activeDot={{ r: 5 }} name="Forecast" connectNulls={false} isAnimationActive={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500">Daily change</div>
+                      <div className="font-semibold text-gray-900">
+                        {forecast.slope > 0 ? '+' : ''}{forecast.slope.toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500">Model confidence</div>
+                      <div className="font-semibold text-gray-900">{(forecast.r2 * 100).toFixed(0)}%</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500">Time to 100%</div>
+                      <div className="font-semibold text-gray-900">
+                        {forecast.hoursToFull == null ? '—' :
+                          forecast.hoursToFull < 24 ? `${forecast.hoursToFull}h` : `${Math.round(forecast.hoursToFull / 24)}d`}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500">Forecast horizon</div>
+                      <div className="font-semibold text-gray-900">7 days</div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Trend Chart */}
         <TabsContent value="trends" className="space-y-4">

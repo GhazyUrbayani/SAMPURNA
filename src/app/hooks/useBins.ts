@@ -71,7 +71,7 @@ export function useBins() {
     loadBins();
 
     const channel = supabase
-      .channel('trash_bins_realtime')
+      .channel(`trash_bins_${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'trash_bins' },
