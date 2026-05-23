@@ -137,7 +137,9 @@ export function setupPwa() {
   }
 
   try {
-    ensureLink('manifest', '/manifest.json');
+    // Manifest link is injected statically in index.html as a data URI by the
+    // Vite plugin (see vite.config.ts) so it works on hosts that don't serve
+    // /public/ (e.g. figma.site). Don't overwrite it here.
     ensureLink('apple-touch-icon', '/logo.svg', { sizes: 'any' });
     ensureLink('icon', '/logo.svg', { type: 'image/svg+xml' });
     ensureLink('shortcut icon', '/logo.svg');
