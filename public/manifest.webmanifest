@@ -11,22 +11,22 @@
   "categories": ["productivity", "utilities"],
   "icons": [
     {
-      "src": "/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%232c5f6f'/><path fill='white' d='M64 56h64v8H64zm-8 16h80v8l-8 80a8 8 0 0 1-8 8H80a8 8 0 0 1-8-8l-8-80zm24 16v64m32-64v64' stroke='white' stroke-width='6' stroke-linecap='round' fill='none'/></svg>",
+      "src": "/icon-192.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='%232c5f6f'/><path fill='white' d='M170 150h172v22H170zm-22 44h216v22l-22 216a22 22 0 0 1-22 22H192a22 22 0 0 1-22-22l-22-216zm64 44v172m88-172v172' stroke='white' stroke-width='16' stroke-linecap='round' fill='none'/></svg>",
+      "src": "/icon-512.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }
