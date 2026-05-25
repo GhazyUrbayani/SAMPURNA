@@ -15,6 +15,28 @@ export interface Bin {
   longitude: number | null;
 }
 
+const ALLOWED_STATUS: BinStatus[] = ['normal', 'warning', 'critical', 'offline'];
+
+function normalizeBin(row: any): Bin {
+  const rawCap = row?.capacity_percentage;
+  const cap = typeof rawCap === 'number' ? rawCap : Number(rawCap);
+  const safeCap = Number.isFinite(cap) ? Math.max(0, Math.min(100, cap)) : 0;
+  const status: BinStatus = ALLOWED_STATUS.includes(row?.status)
+    ? row.status
+    : safeCap > 80 ? 'critical' : safeCap >= 50 ? 'warning' : 'normal';
+  return {
+    id: String(row?.id ?? ''),
+    bin_id: String(row?.bin_id ?? ''),
+    location: typeof row?.location === 'string' && row.location ? row.location : 'Unknown',
+    capacity_percentage: safeCap,
+    status,
+    last_updated: row?.last_updated ?? null,
+    device_id: row?.device_id ?? null,
+    latitude: typeof row?.latitude === 'number' ? row.latitude : null,
+    longitude: typeof row?.longitude === 'number' ? row.longitude : null,
+  };
+}
+
 export function useBins() {
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +52,7 @@ export function useBins() {
         .order('last_updated', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setBins((data as Bin[]) || []);
+      setBins(((data as any[]) || []).map(normalizeBin));
     } catch (err: unknown) {
       console.error('Failed to load bins:', err);
       setError(err instanceof Error ? err.message : 'Failed to load bins');
@@ -70,20 +92,27 @@ export function useBins() {
   useEffect(() => {
     loadBins();
 
+    const normalize = normalizeBin;
+
     const channel = supabase
       .channel(`trash_bins_${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'trash_bins' },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setBins(prev => [payload.new as Bin, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            setBins(prev =>
-              prev.map(bin => bin.id === (payload.new as Bin).id ? (payload.new as Bin) : bin)
-            );
-          } else if (payload.eventType === 'DELETE') {
-            setBins(prev => prev.filter(bin => bin.id !== (payload.old as Bin).id));
+          try {
+            if (payload.eventType === 'INSERT') {
+              const incoming = normalize(payload.new);
+              setBins(prev => prev.some(b => b.id === incoming.id) ? prev : [incoming, ...prev]);
+            } else if (payload.eventType === 'UPDATE') {
+              const incoming = normalize(payload.new);
+              setBins(prev => prev.map(bin => bin.id === incoming.id ? incoming : bin));
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = String((payload.old as any)?.id ?? '');
+              setBins(prev => prev.filter(bin => bin.id !== oldId));
+            }
+          } catch (e) {
+            console.error('Realtime payload handling failed:', e, payload);
           }
         }
       )

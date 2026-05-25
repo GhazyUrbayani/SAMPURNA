@@ -118,7 +118,7 @@ export function useAnalytics() {
         // Zone comparison - group by first part of location before ' - '
         const byZone = new Map<string, number[]>();
         bins.forEach(bin => {
-          const zone = bin.location.split(' - ')[0].trim();
+          const zone = (bin.location ?? 'Unknown').split(' - ')[0].trim() || 'Unknown';
           if (!byZone.has(zone)) byZone.set(zone, []);
           byZone.get(zone)!.push(bin.capacity_percentage ?? 0);
         });
